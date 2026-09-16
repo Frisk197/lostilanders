@@ -1,0 +1,26 @@
+[package]
+name = "lostilanders"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dioxus = { version = "=0.7.10", features = ["fullstack", "router"] }
+
+sqlx = { version = "0.9.0", optional = true, features = [
+    "runtime-tokio",
+    "postgres"
+] }
+
+dotenvy = { version = "0.15", optional = true }
+tokio = "1.53.1"
+serde = { version = "1.0.229", features = ["derive"] }
+ssh-key = { version =  "0.6.7", features = ["ed25519"] }
+
+[features]
+default = []
+web = ["dioxus/web"]
+server = [
+    "dioxus/server",
+    "dep:sqlx",
+    "dep:dotenvy"
+]

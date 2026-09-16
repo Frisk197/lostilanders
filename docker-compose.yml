@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: lostilanders-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: lostilanders
+      POSTGRES_PASSWORD: lostilanders_dev
+      POSTGRES_DB: lostilanders
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - lostilanders_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  lostilanders_postgres_data:
