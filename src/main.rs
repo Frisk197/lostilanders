@@ -1,6 +1,7 @@
 mod server;
 mod ilanders;
 mod parents;
+mod components;
 
 use std::fs;
 use dioxus::prelude::*;
@@ -12,6 +13,7 @@ use dioxus::server::axum::{
     middleware::{self, Next},
     response::{IntoResponse, Response},
 };
+use crate::components::toast::ToastProvider;
 
 #[cfg(feature = "server")]
 #[tokio::main]
@@ -56,6 +58,8 @@ fn main() {
 #[component]
 fn App() -> Element {
     rsx! {
-        Router::<ParentRoute> {}
+        ToastProvider {
+            Router::<ParentRoute> {}
+        }
     }
 }

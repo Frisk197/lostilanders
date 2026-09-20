@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use dioxus::warnings::AllowFutureExt;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use ssh_key::PublicKey;
 use crate::server;
@@ -54,14 +54,32 @@ pub struct RegisterRequest {
     pub ssh_key: String,
 }
 
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq)]
+pub struct Ilander {
+    pub id: i32,
+    pub name: String,
+    pub token_balance: i32,
+    pub last_connexion: i64,
+    pub last_news_pull: Option<i64>,
+}
+
 #[cfg(feature = "server")]
-#[derive(sqlx::FromRow)]
-struct Ilander {
-    id: i32,
-    name: String,
-    token_count: i32,
-    last_connexion: f32,
-    last_news_pull: f32,
+impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for Ilander {
+    fn from_row(
+        row: &'r sqlx::postgres::PgRow,
+    ) -> Result<Self, sqlx::Error> {
+        use sqlx::Row;
+
+        Ok(Self {
+            id: row.try_get("id")?,
+            name: row.try_get("name")?,
+            token_balance: row.try_get("token_count")?,
+            last_connexion: row.try_get("last_connexion")?,
+            last_news_pull: row.try_get("last_news_pull")?,
+        })
+    }
 }
 
 #[cfg(feature = "server")]

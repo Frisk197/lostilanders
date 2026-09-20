@@ -11,10 +11,16 @@ sqlx = { version = "0.9.0", optional = true, features = [
     "postgres"
 ] }
 
+chrono = "0.4"
+chrono-tz = "0.10"
 dotenvy = { version = "0.15", optional = true }
 tokio = "1.53.1"
 serde = { version = "1.0.229", features = ["derive"] }
 ssh-key = { version =  "0.6.7", features = ["ed25519"] }
+dioxus-primitives = { git = "https://github.com/DioxusLabs/components", version = "0.0.1", default-features = false }
+dioxus-icons = { version = "0.1.0", default-features = false }
+argon2 = { version = "0.6", optional = true }
+dioxus-ssr = "0.7.10"
 
 [features]
 default = []
@@ -22,5 +28,6 @@ web = ["dioxus/web"]
 server = [
     "dioxus/server",
     "dep:sqlx",
-    "dep:dotenvy"
+    "dep:dotenvy",
+    "dep:argon2"
 ]
