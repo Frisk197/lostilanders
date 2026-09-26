@@ -85,11 +85,6 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for Ilander {
 #[cfg(feature = "server")]
 pub async fn register(data: dioxus_server::axum::Form<RegisterRequest>) -> Result<(StatusCode, String), (StatusCode, String)>{
     if let Some(pool) = server::DB_POOL.get(){
-        fs::write(format!("data/ssh_public_keys/{}.pub", data.ilander_id), data.ssh_key.clone())
-            .map_err(|e|{
-                println!("Write file error: {e}");
-                (StatusCode::INTERNAL_SERVER_ERROR, "File could not be created.".into())
-            })?;
 
         let result: bool = sqlx::query_scalar("SELECT EXISTS(SELECT ID FROM ILANDER WHERE ID=$1)")
             .bind(data.ilander_id)
@@ -109,6 +104,11 @@ pub async fn register(data: dioxus_server::axum::Form<RegisterRequest>) -> Resul
                 .map_err(|e| {
                     println!("DB error: {e}");
                     (StatusCode::INTERNAL_SERVER_ERROR, "Database error.".into())
+                })?;
+            fs::write(format!("data/ssh_public_keys/{}.pub", data.ilander_id), data.ssh_key.clone())
+                .map_err(|e|{
+                    println!("Write file error: {e}");
+                    (StatusCode::INTERNAL_SERVER_ERROR, "File could not be created.".into())
                 })?;
             Ok((StatusCode::OK, "Account created successfully!".into()))
         } else {

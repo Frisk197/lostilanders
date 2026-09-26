@@ -40,7 +40,12 @@ body {
 .page-topbar {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
     margin-bottom: 32px;
+}
+
+.page-topbar > *{
+    margin-left: 1rem;
 }
 
 .login-button {

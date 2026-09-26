@@ -7,6 +7,7 @@ use crate::components::button::Button;
 use crate::components::card::{*};
 use crate::components::input::Input;
 use crate::components::label::Label;
+use crate::server::logout;
 
 #[derive(Routable, Clone, PartialEq)]
 pub enum ParentRoute {
@@ -86,23 +87,51 @@ fn IlandersList() -> Element {
 fn TopBar() -> Element{
     let mut show_auth = use_signal(|| false);
     let mut register_mode = use_signal(|| false);
+    let mut current_user = use_resource(|| async {
+        server::get_current_user().await
+    });
+
 
     rsx!{
         div {
             class: "page-topbar",
 
-            button {
-                class: "login-button",
-                onclick: move |_| {
-                    register_mode.set(false);
-                    show_auth.set(true);
+            match &*current_user.read() {
+                Some(Ok(Some(user))) => rsx!{
+                    "{user.username}"
+                    button {
+                        class: "login-button",
+                        onclick: move |_| {
+                            spawn(async move {logout().await; current_user.restart();});
+                        },
+                        "Disconnect"
+                    }
                 },
-                "Connect"
+                Some(Ok(None)) => rsx!{
+                    button {
+                        class: "login-button",
+                        onclick: move |_| {
+                            register_mode.set(false);
+                            show_auth.set(true);
+                        },
+                        "Connect"
+                    }
+                },
+                Some(Err(error)) => rsx!{
+
+                },
+                None => rsx! {
+                    p { "Loading..." }
+                }
             }
+
+
         }
 
         if show_auth() {
             AuthModal {
+                on_login: move |_| current_user.restart(),
+
                 show_auth: show_auth,
                 register_mode: register_mode,
             }
@@ -142,6 +171,7 @@ fn IlanderCard(ilander: ilanders::Ilander) -> Element {
 
 #[component]
 fn AuthModal(
+    on_login: EventHandler<()>,
     mut show_auth: Signal<bool>,
     mut register_mode: Signal<bool>,
 ) -> Element {
@@ -259,6 +289,8 @@ fn AuthModal(
                                     Ok(_) => {
                                         use_toast().success("Account created!".to_string(),
                                             ToastOptions::new());
+                                        on_login.call(());
+                                        show_auth.set(false);
                                     }
 
                                     Err(error) => {
@@ -350,6 +382,8 @@ fn AuthModal(
                                     Ok(_) => {
                                         use_toast().success("You are connected!".to_string(),
                                             ToastOptions::new());
+                                        on_login.call(());
+                                        show_auth.set(false);
                                     }
 
                                     Err(error) => {
