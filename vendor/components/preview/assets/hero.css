@@ -1,0 +1,150 @@
+#hero {
+    display: flex;
+    justify-content: center;
+}
+
+.dx-hero-shell {
+    position: relative;
+    display: flex;
+    overflow: hidden;
+    width: 100%;
+    box-sizing: border-box;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 6rem 0 8rem;
+    border-bottom: 1px solid var(--primary-color-6);
+    gap: 1rem;
+}
+
+.dx-hero-shell::before {
+    position: absolute;
+    background-image:
+        linear-gradient(var(--primary-color-6) 1px, transparent 1px),
+        linear-gradient(90deg, var(--primary-color-6) 1px, transparent 1px);
+    background-size: 28px 28px;
+    content: "";
+    inset: 0;
+    mask-image: linear-gradient(90deg, transparent, rgb(0 0 0 / 28%), transparent);
+    pointer-events: none;
+}
+
+.dx-hero-shell > h1,
+.dx-hero-summary,
+.dx-hero-command,
+.dx-hero-cta {
+    position: relative;
+}
+
+.dx-hero-cta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+.dx-hero-cta-primary {
+    display: inline-flex;
+    height: 2.5rem;
+    box-sizing: border-box;
+    align-items: center;
+    padding: 0 1rem;
+    border: 1px solid var(--secondary-color-3);
+    border-radius: 0.25rem;
+    background-color: var(--secondary-color-3);
+    color: var(--primary-color);
+    font-size: 0.925rem;
+    font-weight: 500;
+    gap: 0.4rem;
+    line-height: 1;
+    text-decoration: none;
+    text-transform: lowercase;
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+
+.dx-hero-cta-primary:hover {
+    border-color: var(--secondary-color-2);
+    background-color: var(--secondary-color-2);
+    transform: translateY(-1px);
+}
+
+.dx-hero-cta-primary:focus-visible {
+    outline: 2px solid var(--focused-border-color);
+    outline-offset: 3px;
+}
+
+.dx-hero-heading {
+    display: flex;
+    max-width: 880px;
+    flex-direction: column;
+    margin: 0;
+    font-size: 3.5rem;
+    font-weight: 300;
+    letter-spacing: -0.0125em;
+    line-height: 1.06;
+    text-transform: lowercase;
+    text-wrap: balance;
+}
+
+.dx-hero-title {
+    color: var(--secondary-color-3);
+}
+
+.dx-hero-subtitle {
+    color: var(--secondary-color-5);
+}
+
+.dx-hero-summary {
+    max-width: 40rem;
+    margin: 0 0 2rem;
+    color: var(--secondary-color-5);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    text-wrap: pretty;
+}
+
+.dx-hero-command {
+    display: inline-flex;
+    max-width: 100%;
+    height: 2.5rem;
+    box-sizing: border-box;
+    align-items: center;
+    padding: 0 0.5rem 0 0.75rem;
+    border: 1px solid var(--primary-color-6);
+    border-radius: 0.25rem;
+    background-color: var(--primary-color-1);
+    color: var(--secondary-color-4);
+    gap: 0.5rem;
+}
+
+.dx-hero-command code {
+    overflow: hidden;
+    padding-right: 20px;
+    font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.925rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dx-hero-prompt {
+    color: var(--highlight-color-tertiary);
+    font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 700;
+}
+
+@media (width <= 760px) {
+    #hero {
+        padding: 2rem 1rem 1.5rem;
+    }
+
+    .dx-hero-shell {
+        padding: 1.5rem 0;
+    }
+
+    .dx-hero-heading {
+        font-size: 2.4rem;
+    }
+
+    .dx-hero-command {
+        width: 100%;
+    }
+}

@@ -24,7 +24,7 @@ use argon2::{
     PasswordVerifier,
     PasswordHasher
 };
-
+use chrono::{DateTime, Utc};
 #[cfg(feature = "server")]
 use dioxus::fullstack::FullstackContext;
 #[cfg(feature = "server")]
@@ -237,16 +237,19 @@ async fn create_session(
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq)]
 pub struct CurrentUser{
     pub id: i32,
-    pub username: String
+    pub username: String,
+    pub role: i32
 }
 
 impl CurrentUser{
-    pub fn from(data: (i32, String)) -> CurrentUser{
+    pub fn from(data: (i32, String, i32)) -> CurrentUser{
         CurrentUser{
             id: data.0,
-            username: data.1
+            username: data.1,
+            role: data.2
         }
     }
 }
@@ -263,7 +266,7 @@ pub async fn get_current_user() -> Result<Option<CurrentUser>, ServerFnError>{
 
             for session in session {
                 let token_hash = hex::encode(Sha256::digest(session.as_bytes()));
-                if let Some(user) = sqlx::query_as::<_, (i32, String)>("SELECT users.id, username FROM users LEFT JOIN sessions ON users.id=sessions.user_id AND sessions.expires_at > NOW() WHERE sessions.id=$1")
+                if let Some(user) = sqlx::query_as::<_, (i32, String, i32)>("SELECT users.id, username, role FROM users LEFT JOIN sessions ON users.id=sessions.user_id AND sessions.expires_at > NOW() WHERE sessions.id=$1")
                     .bind(token_hash)
                     .fetch_optional(pool)
                     .await
@@ -346,4 +349,90 @@ pub async fn logout() -> Result<(), ServerFnError>{
     )).map_err(|_| ServerFnError::new("Unable to create session cookie."))?;
     context.add_response_header(SET_COOKIE, cookie);
     Ok(())
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct Users{
+    pub id: i32,
+    pub username: String,
+    pub role: i32,
+    pub created_at: DateTime<Utc>
+}
+
+impl Users{
+    pub fn from(data: (i32, String, i32, DateTime<Utc>)) -> Users{
+        Users{
+            id: data.0,
+            username: data.1,
+            role: data.2,
+            created_at: data.3
+        }
+    }
+}
+
+#[server]
+pub async fn get_all_users(user_id_ignore: i32) -> Result<Option<Vec<Users>>, ServerFnError>{
+    let pool = DB_POOL
+        .get()
+        .ok_or_else(|| ServerFnError::new("Database pool not initialized"))?;
+    let current_user = get_current_user().await?;
+    if let Some(current_user) = current_user{
+        if current_user.role < 2 {
+            return Err(ServerFnError::new("Must be an admin!"));
+        }
+        let users: Vec<Users> = sqlx::query_as::<_, (i32, String, i32, DateTime<Utc>)>("SELECT id, username, role, created_at FROM users WHERE id<>$1")
+            .bind(user_id_ignore)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| ServerFnError::new(e.to_string()))?
+            .into_iter().map(|x| {Users::from(x)}).collect();
+
+        if users.is_empty(){
+            Ok(None)
+        } else {
+            Ok(Some(users))
+        }
+    } else {
+        Err(ServerFnError::new("Must be an admin!"))
+    }
+}
+
+#[server]
+pub async fn change_role(id: i32, new_role: i32) -> Result<(), ServerFnError>{
+    let pool = DB_POOL
+        .get()
+        .ok_or_else(|| ServerFnError::new("Database pool not initialized"))?;
+    let current_user = get_current_user().await?;
+    if let Some(current_user) = current_user{
+        if current_user.role < 2 {
+            return Err(ServerFnError::new("Must be an admin!"));
+        }
+        if id == current_user.id{
+            return Err(ServerFnError::new("You can't change your role."));
+        }
+        if new_role >= current_user.role{
+            return Err(ServerFnError::new("Cannot assign a role >= to you."));
+        }
+        let current_role = sqlx::query_scalar::<_, i32>("SELECT role FROM users WHERE id=$1")
+            .bind(id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| ServerFnError::new(e.to_string()))?;
+        if let Some(current_role) = current_role{
+            if current_role >= current_user.role{
+                return Err(ServerFnError::new("Cannot change the role of someone >= to you."));
+            }
+            sqlx::query("UPDATE users SET role=$1 WHERE id=$2")
+                .bind(new_role)
+                .bind(id)
+                .execute(pool)
+                .await
+                .map_err(|e| ServerFnError::new(e.to_string()))?;
+            Ok(())
+        } else {
+            Err(ServerFnError::new("The user might not exist."))
+        }
+    } else {
+        Err(ServerFnError::new("Must be an admin!"))
+    }
 }

@@ -1,0 +1,116 @@
+name: Rust CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - /
+      - preview/**/*.rs
+      - preview/**/Cargo.toml
+      - primitives/**/*.rs
+      - primitives/**/Cargo.toml
+      - .github/**
+      - ../../../../Cargo.toml
+
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches:
+      - main
+    paths:
+      - /
+      - preview/**/*.rs
+      - preview/**/Cargo.toml
+      - primitives/**/*.rs
+      - primitives/**/Cargo.toml
+      - .github/**
+      - ../../../../Cargo.toml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: github.event.pull_request.draft == false
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
+          version: 1.0
+      - uses: DioxusLabs/dioxus-ci/actions/setup-dioxus@v0.1.0
+        with:
+          toolchain: stable
+          cache-on-failure: "false"
+          cache-directories: "target/dx"
+      - name: Check
+        run: cargo check --workspace --all-features
+
+  test:
+    if: github.event.pull_request.draft == false
+    name: Test Suite
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Free Disk Space
+        uses: DioxusLabs/dioxus-ci/actions/free-disk-space@v0.1.0
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
+          version: 1.0
+      - uses: DioxusLabs/dioxus-ci/actions/setup-dioxus@v0.1.0
+        with:
+          toolchain: 1.88.0
+          components: rustfmt, clippy
+      - uses: browser-actions/setup-firefox@latest
+      - run: cargo test --workspace
+
+  fmt:
+    if: github.event.pull_request.draft == false
+    name: Rustfmt
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DioxusLabs/dioxus-ci/actions/setup-dioxus@v0.1.0
+        with:
+          toolchain: 1.88.0
+          components: rustfmt
+      - run: cargo fmt --all -- --check
+
+  docs:
+    if: github.event.pull_request.draft == false
+    name: Docs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
+          version: 1.0
+      - uses: DioxusLabs/dioxus-ci/actions/setup-dioxus@v0.1.0
+        with:
+          toolchain: nightly
+      - name: "doc --lib --all-features"
+        run: |
+          cargo doc --workspace --no-deps --all-features --document-private-items
+        env:
+          RUSTDOCFLAGS: -Dwarnings --document-private-items
+
+  clippy:
+    if: github.event.pull_request.draft == false
+    name: Clippy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev libxdo-dev
+          version: 1.0
+      - uses: DioxusLabs/dioxus-ci/actions/setup-dioxus@v0.1.0
+        with:
+          toolchain: 1.88.0
+          components: rustfmt, clippy
+      - run: cargo clippy --workspace --examples --tests --all-features --all-targets -- -D warnings

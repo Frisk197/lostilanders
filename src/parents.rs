@@ -1,24 +1,39 @@
 use chrono::{DateTime, TimeZone};
 use chrono_tz::Europe::Paris;
 use dioxus::prelude::*;
+use dioxus_primitives::select::SelectGroup;
+use crate::components::navbar::{Navbar, NavbarContent, NavbarItem, NavbarNav, NavbarTrigger};
 use dioxus_primitives::toast::{use_toast, Toast, Toasts, ToastOptions};
 use crate::{ilanders, server};
 use crate::components::button::Button;
 use crate::components::card::{*};
+use crate::components::drag_and_drop_list::DragAndDropList;
 use crate::components::input::Input;
 use crate::components::label::Label;
-use crate::server::logout;
+use crate::components::select::{Select, SelectGroupLabel, SelectOption};
+use crate::server::{logout, CurrentUser};
 
 #[derive(Routable, Clone, PartialEq)]
 pub enum ParentRoute {
     #[route("/")]
     Home {},
-    #[route("/parents")]
+    #[route("/parents/")]
+    ParentsHome {},
+    #[route("/parents/ilanders-list")]
     IlandersList {},
+    #[route("/parents/users-list")]
+    UsersList {},
 }
 
 #[component]
 fn Home() -> Element{
+    rsx!{
+
+    }
+}
+
+#[component]
+fn ParentsHome() -> Element{
     rsx!{
 
     }
@@ -31,60 +46,157 @@ fn IlandersList() -> Element {
     });
 
     rsx! {
-        document::Stylesheet {
-            href: asset!("/assets/dx-components-theme.css")
-        }
+        TopBar {}
 
-        document::Stylesheet {
-            href: asset!("/assets/main_style.css")
+        div {
+            class: "page-header",
+
+            h1 {
+                "Welcome to LostIlanders!"
+            }
+
+            p {
+                "Here's a list of the iLanders currently registered."
+            }
         }
 
         div {
-            class: "page",
+            class: "ilander-grid",
 
-            TopBar {}
-
-            div {
-                class: "page-header",
-
-                h1 {
-                    "Welcome to LostIlanders!"
-                }
-
-                p {
-                    "Here's a list of the iLanders currently registered."
-                }
-            }
-
-            div {
-                class: "ilander-grid",
-
-                match &*ilanders.read() {
-                    Some(Ok(ilanders)) => rsx! {
-                        for ilander in ilanders {
-                            IlanderCard {
-                                ilander: ilander.clone()
-                            }
+            match &*ilanders.read() {
+                Some(Ok(ilanders)) => rsx! {
+                    for ilander in ilanders {
+                        IlanderCard {
+                            ilander: ilander.clone()
                         }
-                    },
-
-                    Some(Err(error)) => rsx! {
-                        p { "Erreur : {error}" }
-                    },
-
-                    None => rsx! {
-                        p { "Loading..." }
                     }
+                },
+
+                Some(Err(error)) => rsx! {
+                    p { "Erreur : {error}" }
+                },
+
+                None => rsx! {
+                    p { "Loading..." }
                 }
             }
         }
-
-
     }
 }
 
 #[component]
-fn TopBar() -> Element{
+fn UsersList() -> Element{
+    let mut current_user = use_resource(|| async {
+        server::get_current_user().await
+    });
+    let navigator = use_navigator();
+
+    rsx!{
+        TopBar {on_user_change: move |_| {current_user.restart();}}
+
+        match &*current_user.read(){
+            Some(Ok(Some(user))) => {
+                if user.role < 2 {navigator.replace(ParentRoute::IlandersList{});}
+                rsx!{
+                    UsersTable { user_id_ignore: user.id }
+                }
+            },
+            None => {rsx!{}},
+            _ => {navigator.replace(ParentRoute::IlandersList{});rsx!{}}
+        }
+    }
+}
+
+#[component]
+fn UsersTable(user_id_ignore: i32) -> Element{
+    let users = use_resource(move || async move {
+        server::get_all_users(user_id_ignore).await
+    });
+    rsx!{
+        match &*users.read(){
+            Some(Ok(Some(users))) => {
+                let users: Vec<Element> = users
+                    .iter()
+                    .map(|u|rsx!{user_item{key: "{u.id}", u: u.clone()}})
+                    .collect();
+                rsx!{
+                    DragAndDropList{
+                        items: users
+                    }
+                }
+            },
+            _ => {rsx!{}}
+        }
+    }
+}
+
+#[component]
+fn user_item(u: server::Users) -> Element {
+
+    let mut role_save = use_signal(|| Some(u.role));
+
+    rsx!{
+        div{
+            class: "users-list-item",
+            p{"{u.id}"}
+            p{"{u.username}"}
+            p{"{u.created_at}"}
+            Select::<i32>{
+                value: Some(role_save.into()),
+                on_value_change: move |mut value: Option<i32>|{
+                    if let Some(v) = value{
+                        spawn(async move {
+                            match server::change_role(u.id, v).await{
+                                Ok(_) => {
+                                    role_save.set(Some(v));
+                                }
+                                Err(e) => {
+                                    use_toast().error("Error".to_string(), ToastOptions::new().description(e.to_string()));
+                                }
+                            }
+                        });
+                    }
+                },
+                SelectGroup{
+                    SelectGroupLabel{"Role"}
+                    SelectOption::<i32>{
+                        index: 0usize,
+                        value: 0i32,
+                        text_value: "User",
+                        "User"
+                    }
+                    SelectOption::<i32>{
+                        index: 1usize,
+                        value: 1i32,
+                        text_value: "Blog Writer",
+                        "Blog Writer"
+                    }
+                    SelectOption::<i32>{
+                        index: 2usize,
+                        value: 2i32,
+                        text_value: "Moderator",
+                        "Moderator"
+                    }
+                    SelectOption::<i32>{
+                        index: 3usize,
+                        value: 3i32,
+                        text_value: "Admin",
+                        "Admin"
+                    }
+                    SelectOption::<i32>{
+                        index: 4usize,
+                        value: 4i32,
+                        text_value: "Super Admin",
+                        "Super Admin"
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[component]
+fn TopBar(#[props(default)] on_user_change: EventHandler<()>) -> Element{
     let mut show_auth = use_signal(|| false);
     let mut register_mode = use_signal(|| false);
     let mut current_user = use_resource(|| async {
@@ -96,34 +208,70 @@ fn TopBar() -> Element{
         div {
             class: "page-topbar",
 
-            match &*current_user.read() {
-                Some(Ok(Some(user))) => rsx!{
-                    "{user.username}"
-                    button {
-                        class: "login-button",
-                        onclick: move |_| {
-                            spawn(async move {logout().await; current_user.restart();});
-                        },
-                        "Disconnect"
+            div{
+                Navbar{
+                    NavbarItem{
+                        index: 0usize,
+                        value: "Ilanders List".to_string(),
+                        to: ParentRoute::IlandersList {},
+                        "Ilanders List"
                     }
-                },
-                Some(Ok(None)) => rsx!{
-                    button {
-                        class: "login-button",
-                        onclick: move |_| {
-                            register_mode.set(false);
-                            show_auth.set(true);
+                    match &*current_user.read(){
+                        Some(Ok(Some(user))) => rsx!{
+                            if user.role > 1{
+                                NavbarNav{
+                                    index: 1usize,
+                                    NavbarTrigger { "Admin Menu" },
+                                    NavbarContent{
+                                        NavbarItem{
+                                            index: 0usize,
+                                            value: "Users List".to_string(),
+                                            to: ParentRoute::UsersList{},
+                                            "Users List"
+                                        }
+                                    }
+                                }
+                            }
                         },
-                        "Connect"
+                        _ => rsx!{}
                     }
-                },
-                Some(Err(error)) => rsx!{
-
-                },
-                None => rsx! {
-                    p { "Loading..." }
                 }
             }
+
+            div{
+                class: "login-div",
+
+                match &*current_user.read() {
+                    Some(Ok(Some(user))) => rsx!{
+                        "{user.username}"
+                        button {
+                            class: "login-button",
+                            onclick: move |_| {
+                                spawn(async move {logout().await; current_user.restart(); on_user_change.call(());});
+                            },
+                            "Disconnect"
+                        }
+                    },
+                    Some(Ok(None)) => rsx!{
+                        button {
+                            class: "login-button",
+                            onclick: move |_| {
+                                register_mode.set(false);
+                                show_auth.set(true);
+                            },
+                            "Connect"
+                        }
+                    },
+                    Some(Err(error)) => rsx!{
+
+                    },
+                    None => rsx! {
+                        p { "Loading..." }
+                    }
+                }
+            }
+
+
 
 
         }

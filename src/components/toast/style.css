@@ -23,7 +23,8 @@
   display: flex;
   overflow: hidden;
   width: 18rem;
-  height: 4rem;
+  height: auto;
+  min-height: 4rem;
   box-sizing: border-box;
   align-items: center;
   justify-content: space-between;

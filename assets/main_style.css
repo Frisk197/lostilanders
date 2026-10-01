@@ -39,12 +39,18 @@ body {
 
 .page-topbar {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     align-items: center;
     margin-bottom: 32px;
 }
 
-.page-topbar > *{
+.page-topbar > .login-div{
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.page-topbar > .login-div > *{
     margin-left: 1rem;
 }
 
@@ -88,4 +94,13 @@ body {
     background: none;
     font-size: 1.5rem;
     cursor: pointer;
+}
+
+.users-list-item{
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+.users-list-item > *{
+    margin-right: 1rem;
 }

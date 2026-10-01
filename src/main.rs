@@ -56,10 +56,37 @@ fn main() {
 }
 
 #[component]
+fn Stylsheets() -> Element{
+    rsx!{
+        Stylesheet { href: asset!("/src/components/avatar/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/badge/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/button/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/card/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/drag_and_drop_list/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/form/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/input/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/label/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/navbar/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/select/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/textarea/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/toast/style.css", AssetOptions::css_module()) }
+
+        Stylesheet { href: asset!("/assets/dx-components-theme.css", AssetOptions::css().with_static_head(true)) }
+
+        Stylesheet { href: asset!("/assets/main_style.css", AssetOptions::css().with_static_head(true)) }
+    }
+}
+
+#[component]
 fn App() -> Element {
     rsx! {
+        Stylsheets {}
+
         ToastProvider {
-            Router::<ParentRoute> {}
+            div{
+                class: "page",
+                Router::<ParentRoute> {}
+            }
         }
     }
 }
