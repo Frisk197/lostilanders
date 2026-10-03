@@ -38,6 +38,7 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "server")]
 use sha2::{Digest, Sha256};
+use time::{Date, OffsetDateTime, UtcDateTime};
 
 #[cfg(feature = "server")]
 pub async fn create_db_pool() -> Result<(), ServerFnError> {
@@ -435,4 +436,97 @@ pub async fn change_role(id: i32, new_role: i32) -> Result<(), ServerFnError>{
     } else {
         Err(ServerFnError::new("Must be an admin!"))
     }
+}
+
+#[server]
+pub async fn publish_news(title: String, body: String) -> Result<(), ServerFnError>{
+    let pool = DB_POOL
+        .get()
+        .ok_or_else(|| ServerFnError::new("Database pool not initialized"))?;
+    let current_user = get_current_user().await?;
+    if let Some(current_user) = current_user{
+        if current_user.role < 1{
+            return Err(ServerFnError::new("Must be a writer!"));
+        }
+        sqlx::query("INSERT INTO news(title, body, author) VALUES($1, $2, $3)")
+            .bind(title)
+            .bind(body)
+            .bind(current_user.id)
+            .execute(pool)
+            .await
+            .map_err(|e| ServerFnError::new(e.to_string()))?;
+        Ok(())
+    } else {
+        Err(ServerFnError::new("Must be a writer!"))
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct NewsListItem{
+    pub id: i32,
+    pub title: String,
+    pub publication_date: OffsetDateTime
+}
+impl NewsListItem{
+    pub fn from(data: (i32, String, OffsetDateTime)) -> NewsListItem{
+        NewsListItem{
+            id: data.0,
+            title: data.1,
+            publication_date: data.2,
+        }
+    }
+}
+
+#[server]
+pub async fn get_news_list(date: Date) -> Result<Option<Vec<NewsListItem>>, ServerFnError>{
+    let pool = DB_POOL
+        .get()
+        .ok_or_else(|| ServerFnError::new("Database pool not initialized"))?;
+    let news: Vec<NewsListItem> = sqlx::query_as::<_, (i32, String, OffsetDateTime)>("SELECT id, title, to_timestamp(publication_date) FROM news WHERE to_timestamp(publication_date)::date=$1")
+        .bind(date)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .into_iter().map(|l|{NewsListItem::from(l)}).collect();
+
+    if news.is_empty(){
+        Ok(None)
+    } else {
+        Ok(Some(news))
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+pub struct News{
+    pub id: i32,
+    pub title: String,
+    pub body: String,
+    pub author: String,
+    pub publication_date: OffsetDateTime
+}
+impl News{
+    pub fn from(data: (i32, String, String, String, OffsetDateTime)) -> News{
+        News{
+            id: data.0,
+            title: data.1,
+            body: data.2,
+            author: data.3,
+            publication_date: data.4,
+        }
+    }
+}
+
+#[server]
+pub async fn get_news(id: i32) -> Result<Option<News>, ServerFnError>{
+    let pool = DB_POOL
+        .get()
+        .ok_or_else(|| ServerFnError::new("Database pool not initialized"))?;
+    let news: Option<News> = sqlx::query_as::<_, (i32, String, String, String, OffsetDateTime)>("SELECT id, title, body, (SELECT username FROM users WHERE users.id=news.author) AS author, to_timestamp(publication_date) FROM news WHERE id=$1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?
+        .map(|l|{News::from(l)});
+
+    Ok(news)
 }

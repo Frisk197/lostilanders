@@ -61,12 +61,15 @@ fn Stylsheets() -> Element{
         Stylesheet { href: asset!("/src/components/avatar/style.css", AssetOptions::css_module()) }
         Stylesheet { href: asset!("/src/components/badge/style.css", AssetOptions::css_module()) }
         Stylesheet { href: asset!("/src/components/button/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/calendar/style.css", AssetOptions::css_module()) }
         Stylesheet { href: asset!("/src/components/card/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/date_picker/style.css", AssetOptions::css_module()) }
         Stylesheet { href: asset!("/src/components/drag_and_drop_list/style.css", AssetOptions::css_module()) }
         Stylesheet { href: asset!("/src/components/form/style.css", AssetOptions::css_module()) }
         Stylesheet { href: asset!("/src/components/input/style.css", AssetOptions::css_module()) }
         Stylesheet { href: asset!("/src/components/label/style.css", AssetOptions::css_module()) }
         Stylesheet { href: asset!("/src/components/navbar/style.css", AssetOptions::css_module()) }
+        Stylesheet { href: asset!("/src/components/popover/style.css", AssetOptions::css_module()) }
         Stylesheet { href: asset!("/src/components/select/style.css", AssetOptions::css_module()) }
         Stylesheet { href: asset!("/src/components/textarea/style.css", AssetOptions::css_module()) }
         Stylesheet { href: asset!("/src/components/toast/style.css", AssetOptions::css_module()) }

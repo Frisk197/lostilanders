@@ -58,9 +58,21 @@ body {
     padding: 10px 18px;
     border: none;
     border-radius: 8px;
-    cursor: pointer;
     font-size: 0.95rem;
     font-weight: 600;
+}
+
+.pointer{
+    cursor: pointer !important;
+}
+
+.news-list-item{
+    display: flex;
+    flex-direction: row;
+}
+
+.news-list-item > *{
+    margin-right: 5rem;
 }
 
 
@@ -103,4 +115,22 @@ body {
 }
 .users-list-item > *{
     margin-right: 1rem;
+}
+
+.post-textareas-global-div{
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+
+.post-text-div{
+    display: flex;
+    flex-direction: column;
+    width: 40%;
+}
+
+.post-publish-div{
+    display: flex;
+    justify-content: space-between;
 }

@@ -19,3 +19,11 @@ CREATE TABLE sessions (
     user_id INTEGER NOT NULL REFERENCES users(id),
     expires_at TIMESTAMPTZ NOT NULL
 );
+
+CREATE TABLE news (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    publication_date BIGINT NOT NULL DEFAULT EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::BIGINT,
+    author INTEGER NOT NULL REFERENCES users(id)
+);

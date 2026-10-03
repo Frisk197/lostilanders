@@ -4,14 +4,17 @@ use dioxus::prelude::*;
 use dioxus_primitives::select::SelectGroup;
 use crate::components::navbar::{Navbar, NavbarContent, NavbarItem, NavbarNav, NavbarTrigger};
 use dioxus_primitives::toast::{use_toast, Toast, Toasts, ToastOptions};
+use time::Date;
 use crate::{ilanders, server};
-use crate::components::button::Button;
+use crate::components::button::{Button, ButtonVariant};
 use crate::components::card::{*};
+use crate::components::date_picker::DatePicker;
 use crate::components::drag_and_drop_list::DragAndDropList;
 use crate::components::input::Input;
 use crate::components::label::Label;
 use crate::components::select::{Select, SelectGroupLabel, SelectOption};
-use crate::server::{logout, CurrentUser};
+use crate::components::textarea::Textarea;
+use crate::server::{logout, CurrentUser, NewsListItem};
 
 #[derive(Routable, Clone, PartialEq)]
 pub enum ParentRoute {
@@ -23,6 +26,12 @@ pub enum ParentRoute {
     IlandersList {},
     #[route("/parents/users-list")]
     UsersList {},
+    #[route("/parents/post-news")]
+    PostNews {},
+    #[route("/parents/news-list")]
+    NewsList {},
+    #[route("/parents/news/:id")]
+    News {id: i32}
 }
 
 #[component]
@@ -80,6 +89,177 @@ fn IlandersList() -> Element {
                     p { "Loading..." }
                 }
             }
+        }
+    }
+}
+
+#[component]
+fn News(id: i32) -> Element{
+    let mut current_user = use_resource(|| async {
+        server::get_current_user().await
+    });
+    let news = use_resource(move || async move {
+        server::get_news(id).await
+    });
+    let parsed_markdown = match &*news.read(){
+        Some(Ok(Some(news))) => {
+            let md = format!("# {}\n\n{}\n\n****\n\n> Author: {}\n\n> Publication: {}", news.title, news.body, news.author, news.publication_date);
+            let parser = pulldown_cmark::Parser::new_ext(&*md, pulldown_cmark::Options::all());
+            let mut html = String::new();
+            pulldown_cmark::html::push_html(&mut html, parser);
+            ammonia::clean(&html)
+        },
+        None => {
+            "Loading...".into()
+        },
+        _ => {
+            "No news.".into()
+        }
+    };
+    rsx!{
+        TopBar {on_user_change: move |_| {current_user.restart();}}
+        div{dangerous_inner_html: "{parsed_markdown}"}
+    }
+}
+
+#[component]
+fn NewsList() -> Element{
+    let mut selected_date: Signal<Option<Date>> = use_signal(|| Some(time::UtcDateTime::now().date()));
+    let mut news_list = use_resource(move || async move {
+        if let Some(date) = selected_date(){
+            server::get_news_list(date).await
+        } else {
+            Err(ServerFnError::new("Date cannot be empty".to_string()))
+        }
+    });
+    let mut current_user = use_resource(|| async {
+        server::get_current_user().await
+    });
+    rsx!{
+        TopBar {on_user_change: move |_| {current_user.restart();}}
+        match &*current_user.read(){
+            Some(Ok(Some(user))) => {
+                if user.role > 0{
+                    rsx!{
+                        Button {variant: ButtonVariant::Primary, class: "pointer", onclick: move |_|{use_navigator().replace(ParentRoute::PostNews {});}, "Publish News"}
+                    }
+                } else {
+                    rsx!{}
+                }
+            },
+            _ => rsx!{}
+        }
+        div{
+            style: "display: flex; justify-content: center; flex-direction: column; align-items: center;",
+            DatePicker{
+                style: "margin-bottom: 15px;",
+                selected_date: selected_date(),
+                on_value_change: move |v| {
+                    selected_date.set(v);
+                    news_list.restart();
+                },
+            }
+            match &*news_list.read(){
+                Some(Ok(Some(news))) => {
+                    let news: Vec<Element> = news.iter().map(|n|rsx!{news_list_item {key: "{n.id}", news_item:n.clone()}}).collect();
+                    rsx!{
+                        DragAndDropList{items: news}
+                    }
+                },
+                Some(Ok(None)) => rsx!{
+                    p { "No news that day." }
+                },
+                Some(Err(error)) => rsx! {
+                    p { "Erreur : {error}" }
+                },
+                None => rsx!{}
+            }
+        }
+    }
+}
+#[component]
+fn news_list_item(news_item: server::NewsListItem) -> Element{
+    let navigator = use_navigator();
+    rsx!{
+        div{
+            class: "news-list-item pointer",
+            onclick: move |_|{navigator.replace(ParentRoute::News {id: news_item.id});},
+            p{"{news_item.title}"}
+            p{"{news_item.publication_date}"}
+        }
+    }
+}
+
+#[component]
+fn PostNews() -> Element {
+    let mut current_user = use_resource(|| async {
+        server::get_current_user().await
+    });
+    let navigator = use_navigator();
+
+    let mut parsed_markdown = use_signal(|| "".to_string());
+    let mut title = use_signal(|| "".to_string());
+    let mut body = use_signal(|| "".to_string());
+
+
+
+    rsx!{
+        TopBar {on_user_change: move |_| {current_user.restart();}}
+
+        match &*current_user.read(){
+            Some(Ok(Some(user))) => {
+                if user.role < 1 {navigator.replace(ParentRoute::IlandersList{});}
+                rsx!{
+                    div{
+                        class: "post-publish-div",
+                        Input {placeholder: "Title", oninput: move |event: FormEvent|{
+                                title.set(event.value());
+                                let md = format!("# {}\n\n{}", title(), body());
+                                let parser = pulldown_cmark::Parser::new_ext(&*md, pulldown_cmark::Options::all());
+                                let mut html = String::new();
+                                pulldown_cmark::html::push_html(&mut html, parser);
+                                parsed_markdown.set(ammonia::clean(&html));
+                            }}
+                        Button {variant: ButtonVariant::Primary, class: "pointer", onclick: move |_|{
+                            spawn(async move {
+                                match server::publish_news(title(), body()).await{
+                                    Ok(_) => {
+                                        use_toast().success("News published!".to_string(), ToastOptions::new());
+                                    }
+                                    Err(e) => {
+                                        use_toast().error("Error".to_string(), ToastOptions::new().description(e.to_string()));
+                                    }
+                                }
+                            });
+                        }, "Publish"}
+                    }
+                    div{
+                        class: "post-textareas-global-div",
+                        div{
+                            class: "post-text-div",
+                            h1{"Mark Down"}
+                            Textarea{oninput: move |event: FormEvent|{
+                                body.set(event.value());
+                                let md = format!("# {}\n\n{}", title(), body());
+                                let parser = pulldown_cmark::Parser::new_ext(&*md, pulldown_cmark::Options::all());
+                                let mut html = String::new();
+                                pulldown_cmark::html::push_html(&mut html, parser);
+                                parsed_markdown.set(ammonia::clean(&html));
+                            }}
+                        }
+                        div{
+                            class: "post-text-div",
+                            h1{"Preview"}
+                            div{
+                                dangerous_inner_html: "{parsed_markdown()}"
+                            }
+                        }
+                    }
+
+                }
+            },
+            None => {rsx!{}},
+            _ => {navigator.replace(ParentRoute::IlandersList{});rsx!{}}
         }
     }
 }
@@ -215,12 +395,18 @@ fn TopBar(#[props(default)] on_user_change: EventHandler<()>) -> Element{
                         value: "Ilanders List".to_string(),
                         to: ParentRoute::IlandersList {},
                         "Ilanders List"
+                    },
+                    NavbarItem{
+                        index: 1usize,
+                        value: "News".to_string(),
+                        to: ParentRoute::NewsList {},
+                        "news"
                     }
                     match &*current_user.read(){
                         Some(Ok(Some(user))) => rsx!{
                             if user.role > 1{
                                 NavbarNav{
-                                    index: 1usize,
+                                    index: 2usize,
                                     NavbarTrigger { "Admin Menu" },
                                     NavbarContent{
                                         NavbarItem{
@@ -244,8 +430,9 @@ fn TopBar(#[props(default)] on_user_change: EventHandler<()>) -> Element{
                 match &*current_user.read() {
                     Some(Ok(Some(user))) => rsx!{
                         "{user.username}"
-                        button {
-                            class: "login-button",
+                        Button {
+                            class: "pointer",
+                            variant: ButtonVariant::Primary,
                             onclick: move |_| {
                                 spawn(async move {logout().await; current_user.restart(); on_user_change.call(());});
                             },
@@ -253,8 +440,9 @@ fn TopBar(#[props(default)] on_user_change: EventHandler<()>) -> Element{
                         }
                     },
                     Some(Ok(None)) => rsx!{
-                        button {
-                            class: "login-button",
+                        Button {
+                            class: "pointer",
+                            variant: ButtonVariant::Primary,
                             onclick: move |_| {
                                 register_mode.set(false);
                                 show_auth.set(true);
