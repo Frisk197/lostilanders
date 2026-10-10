@@ -96,7 +96,7 @@ pub async fn register(data: dioxus_server::axum::Form<RegisterRequest>) -> Resul
             })?;
 
         if !result{
-            sqlx::query("INSERT INTO ilander(ID, NAME, LAST_CONNEXION, LAST_NEWS_PULL) VALUES ($1, $2, EXTRACT(EPOCH FROM CURRENT_TIMESTAMP), NULL)")
+            sqlx::query("INSERT INTO ilander(ID, NAME, LAST_CONNEXION) VALUES ($1, $2, EXTRACT(EPOCH FROM CURRENT_TIMESTAMP))")
                 .bind(data.ilander_id)
                 .bind(data.name.clone())
                 .execute(pool)
@@ -171,19 +171,21 @@ pub async fn login(login: Login) -> Result<(), (StatusCode, String)>{
                     .unwrap()
                     .as_secs();
                 if let Some(ilander_last_login) = ilander_last_login{
-                    if ilander_last_login < login.timestamp && login.timestamp <= timestamp as i64{
-                        sqlx::query("UPDATE ILANDER SET LAST_CONNEXION=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP), TOKEN_COUNT=$1 WHERE ID=$2")
-                            .bind(login.token_balance)
-                            .bind(login.ilander_id)
-                            .execute(pool)
-                            .await
-                            .map_err(|e| {
-                                println!("DB error: {e}");
-                                (StatusCode::INTERNAL_SERVER_ERROR, "Database error.".into())
-                            })?;
-                        Ok(())
-                    } else {
+                    if sqlx::query("UPDATE ILANDER SET LAST_CONNEXION=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP), TOKEN_COUNT=$1 WHERE ID=$2 AND LAST_CONNEXION < $3 AND LAST_CONNEXION <= $4")
+                        .bind(login.token_balance)
+                        .bind(login.ilander_id)
+                        .bind(login.timestamp)
+                        .bind(timestamp)
+                        .execute(pool)
+                        .await
+                        .map_err(|e| {
+                            println!("DB error: {e}");
+                            (StatusCode::INTERNAL_SERVER_ERROR, "Database error.".into())
+                        })?
+                        .rows_affected() == 0{
                         Err((StatusCode::BAD_REQUEST, "Login request expired.".into()))
+                    } else {
+                        Ok(())
                     }
                 } else {
                     Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Ilander {} does not exist in database.", login.ilander_id)))
