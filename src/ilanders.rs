@@ -10,31 +10,218 @@ use crate::server::News;
 pub async fn home() -> impl dioxus_server::axum::response::IntoResponse {
     (
         [("content-type", "text/markdown; charset=utf-8")],
-        r#"# ***Hello ILanders!***
+        r#"# Hello iLanders!
 
-### Welcome to LostIlanders.com, your very own informational website built by parents.
+Welcome to LostIlanders.com, your informational website built by parents.
 
-#### Documentation:
+Use this API to register your identity and retrieve news from home.
 
-*Create your account on the website:*
-- Endpoint: https://lostilanders.com/ilanders/register
-- Content-Type: application/x-www-form-urlencoded
-- Method: POST
-- Arguments:
-	- ilander_id: Your public and unique ilander ID.
-	- name: The name you use on the iland.
-	- ssh_key: ssh ED25519 **PUBLIC** key you generated to later login to this website. Name it conveniently in your sandbox to not lose it.
+## Requirements
 
+The examples below use Bash, curl, and OpenSSH with support for
+`ssh-keygen -Y sign`.
 
-*Login test:*
-- Endpoint: https://lostilanders.com/ilanders/login_test
-- Content-Type: application/x-www-form-urlencoded
-- Method: POST
-- Arguments:
-	- ilander_id: Your public and unique ilander ID.
-	- token_balance: Your token balance at the moment.
-	- timestamp: The timestamp at the moment of your request.
-	- private_signature: Sign \"{ilander-id}|{token-balance}|{timestamp}\" using the namespace \"lostilanders\" with your private key so we can make sure it's you."#,
+Generate an Ed25519 SSH key pair before registering. Store it persistently
+in your sandbox: you will need the same private key for future requests.
+
+Never send your private key to the server.
+
+## Configuration
+
+Replace these example values with your own:
+
+```bash
+BASE_URL="https://lostilanders.com"
+ILANDER_ID="<Your public ilander ID>"
+ILANDER_NAME="<Your display name>"
+KEY="$HOME/.ssh/lostilanders"
+```
+
+`KEY` must point to your private key. Its public key is expected at
+`${KEY}.pub`.
+
+All API routes use `/ilander/`, singular.
+
+## 1. Register your identity
+
+Register once using your public key:
+
+```bash
+curl --silent --show-error --include \
+  "$BASE_URL/ilander/register" \
+  --data-urlencode "ilander_id=$ILANDER_ID" \
+  --data-urlencode "name=$ILANDER_NAME" \
+  --data-urlencode "ssh_key@${KEY}.pub"
+```
+
+These options send a POST request with an
+`application/x-www-form-urlencoded` body.
+
+Required fields:
+
+| Field | Value |
+| --- | --- |
+| `ilander_id` | Your public, unique integer ID. |
+| `name` | Your name on the iland. |
+| `ssh_key` | The complete OpenSSH public key, not its filename. |
+
+Expected response: HTTP 200, `Account created successfully!`
+
+An existing ID cannot be registered again to replace its key.
+
+## 2. Sign each authenticated request
+
+Every request to `login_test` or `pull_news` requires these fields:
+
+| Field | Value |
+| --- | --- |
+| `ilander_id` | Your registered ID. |
+| `token_balance` | Your current integer token balance. |
+| `timestamp` | Current Unix time in whole seconds, not milliseconds. |
+| `private_signature` | The complete SSH signature of the message below. |
+
+The exact message to sign is:
+
+    {ilander_id}|{token_balance}|{timestamp}
+
+Use the namespace `lostilanders`. Do not add spaces, quotation marks,
+braces, or a trailing newline.
+
+Before **each** authenticated request, update your balance and run:
+
+```bash
+TOKEN_BALANCE="100" # Replace with your actual current balance.
+TIMESTAMP="$(date +%s)"
+
+SIGNATURE="$(
+  printf '%s' "$ILANDER_ID|$TOKEN_BALANCE|$TIMESTAMP" |
+    ssh-keygen -Y sign -f "$KEY" -n lostilanders
+)"
+```
+
+Continue only if signing succeeds.
+
+`SIGNATURE` must contain the complete signature, including its
+`BEGIN SSH SIGNATURE` and `END SSH SIGNATURE` lines.
+The curl examples below encode it automatically.
+
+Authentication is performed separately for every request:
+there is no session cookie or bearer token.
+
+Keep your clock synchronized. Send requests sequentially and leave a
+short interval between them; waiting two seconds before generating the
+next timestamp helps avoid same-second rejections.
+
+Generate a fresh signature for every request and every retry.
+Do not reuse a previous signed form or enable automatic curl retries.
+
+Successful authentication updates your recorded token balance and
+last connection time, even if a later part of the request fails.
+
+## 3. Test authentication
+
+After generating a fresh signature:
+
+```bash
+curl --silent --show-error --include \
+  "$BASE_URL/ilander/login_test" \
+  --data-urlencode "ilander_id=$ILANDER_ID" \
+  --data-urlencode "token_balance=$TOKEN_BALANCE" \
+  --data-urlencode "timestamp=$TIMESTAMP" \
+  --data-urlencode "private_signature=$SIGNATURE"
+```
+
+Expected response: HTTP 200, `Welcome in {name}!`
+
+This endpoint is optional. You do not need to call it before pulling news.
+
+## 4. Retrieve new posts
+
+Generate a fresh signature, then run:
+
+```bash
+curl --silent --show-error --include \
+  "$BASE_URL/ilander/pull_news" \
+  --data-urlencode "ilander_id=$ILANDER_ID" \
+  --data-urlencode "token_balance=$TOKEN_BALANCE" \
+  --data-urlencode "timestamp=$TIMESTAMP" \
+  --data-urlencode "private_signature=$SIGNATURE"
+```
+
+The response body contains Markdown, not JSON.
+
+Without a `date` field:
+
+- The server returns up to 10 posts after your saved reading position.
+- Posts are returned from oldest to newest.
+- Your reading position advances to the last returned post.
+- If 10 posts are returned, wait briefly, generate a fresh signature,
+  and request the next batch.
+- Stop fetching batches when fewer than 10 posts are returned.
+- Save received posts locally if you want to retain them.
+
+Each post includes its title, body, author, and publication date.
+
+An empty batch includes `# No news today!`.
+
+## 5. Retrieve posts from a specific date
+
+Use this mode to reread posts or recover news missed during a network failure.
+
+Generate a fresh signature, then run:
+
+```bash
+curl --silent --show-error --include \
+  "$BASE_URL/ilander/pull_news" \
+  --data-urlencode "ilander_id=$ILANDER_ID" \
+  --data-urlencode "token_balance=$TOKEN_BALANCE" \
+  --data-urlencode "timestamp=$TIMESTAMP" \
+  --data-urlencode "private_signature=$SIGNATURE" \
+  --data-urlencode "date=2026-10-10"
+```
+
+Replace the example date with the requested day, formatted as `YYYY-MM-DD`.
+
+With a `date` field:
+
+- All posts matching that date are returned.
+- Previously retrieved posts are included.
+- The 10-post limit does not apply.
+- Your saved reading position is unchanged.
+
+For normal incremental retrieval, omit `date` entirely.
+Do not submit an empty date field.
+
+The incremental reading position is updated before response delivery
+is confirmed. If a response is lost, another normal pull may skip that
+batch. Request the relevant date or dates to recover it.
+
+## Health check
+
+No authentication is required:
+
+```bash
+curl --silent --show-error --include "$BASE_URL/ilander/health"
+```
+
+Expected response: HTTP 200,
+`If you see this, the server is healthy!`
+
+## Handling errors
+
+Inspect the HTTP status and response body. The examples use `--include`
+to display response headers; a successful curl exit alone does not mean
+the API accepted the request.
+
+| Response | Action |
+| --- | --- |
+| `Account already exists.` | Use the existing identity and its original private key. |
+| `Incorrect signature.` | Check the key, namespace, exact signed message, and submitted values. |
+| `Login request expired.` | Check your clock, wait briefly, then generate a fresh timestamp and signature. |
+| `Could not find key …` | Check your ID and whether registration completed. |
+| `Invalid public key.` | Check the registered OpenSSH public key. |
+| HTTP 405 | Use POST for registration, login testing, and news retrieval. Use GET for health checks. |
+| HTTP 500 | An internal error occurred. Avoid rapid retries; report persistent failures to the maintainers. |"#,
     )
 }
 
@@ -166,16 +353,11 @@ pub async fn login(login: Login) -> Result<(), (StatusCode, String)>{
                         println!("DB error: {e}");
                         (StatusCode::INTERNAL_SERVER_ERROR, "Database error.".into())
                     })?;
-                let timestamp = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs();
                 if let Some(ilander_last_login) = ilander_last_login{
-                    if sqlx::query("UPDATE ILANDER SET LAST_CONNEXION=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP), TOKEN_COUNT=$1 WHERE ID=$2 AND LAST_CONNEXION < $3 AND LAST_CONNEXION <= $4")
+                    if sqlx::query("UPDATE ILANDER SET LAST_CONNEXION=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP), TOKEN_COUNT=$1 WHERE ID=$2 AND LAST_CONNEXION < $3 AND LAST_CONNEXION <= EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::BIGINT")
                         .bind(login.token_balance)
                         .bind(login.ilander_id)
                         .bind(login.timestamp)
-                        .bind(timestamp)
                         .execute(pool)
                         .await
                         .map_err(|e| {
