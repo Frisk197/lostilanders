@@ -141,7 +141,7 @@ fn NewsList() -> Element{
             Some(Ok(Some(user))) => {
                 if user.role > 0{
                     rsx!{
-                        Button {variant: ButtonVariant::Primary, class: "pointer", onclick: move |_|{use_navigator().replace(ParentRoute::PostNews {});}, "Publish News"}
+                        Button {variant: ButtonVariant::Primary, class: "pointer", onclick: move |_|{use_navigator().push(ParentRoute::PostNews {});}, "Publish News"}
                     }
                 } else {
                     rsx!{}
@@ -183,7 +183,7 @@ fn news_list_item(news_item: server::NewsListItem) -> Element{
     rsx!{
         div{
             class: "news-list-item pointer",
-            onclick: move |_|{navigator.replace(ParentRoute::News {id: news_item.id});},
+            onclick: move |_|{navigator.push(ParentRoute::News {id: news_item.id});},
             p{"{news_item.title}"}
             p{"{news_item.publication_date}"}
         }
@@ -208,7 +208,7 @@ fn PostNews() -> Element {
 
         match &*current_user.read(){
             Some(Ok(Some(user))) => {
-                if user.role < 1 {navigator.replace(ParentRoute::IlandersList{});}
+                if user.role < 1 {navigator.push(ParentRoute::IlandersList{});}
                 rsx!{
                     div{
                         class: "post-publish-div",
@@ -259,7 +259,7 @@ fn PostNews() -> Element {
                 }
             },
             None => {rsx!{}},
-            _ => {navigator.replace(ParentRoute::IlandersList{});rsx!{}}
+            _ => {navigator.push(ParentRoute::IlandersList{});rsx!{}}
         }
     }
 }
@@ -276,13 +276,13 @@ fn UsersList() -> Element{
 
         match &*current_user.read(){
             Some(Ok(Some(user))) => {
-                if user.role < 2 {navigator.replace(ParentRoute::IlandersList{});}
+                if user.role < 2 {navigator.push(ParentRoute::IlandersList{});}
                 rsx!{
                     UsersTable { user_id_ignore: user.id }
                 }
             },
             None => {rsx!{}},
-            _ => {navigator.replace(ParentRoute::IlandersList{});rsx!{}}
+            _ => {navigator.push(ParentRoute::IlandersList{});rsx!{}}
         }
     }
 }

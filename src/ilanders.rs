@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use ssh_key::PublicKey;
 use crate::server;
-
+use crate::server::News;
 
 #[cfg(feature = "server")]
 pub async fn home() -> impl dioxus_server::axum::response::IntoResponse {
@@ -222,4 +222,34 @@ pub async fn login_test(data: dioxus_server::axum::Form<Login>) -> Result<(Statu
     }
 }
 
+#[derive(Deserialize)]
+pub struct PullNewsRequest{
+    pub ilander_id: i32,
+    pub token_balance: i64,
+    pub timestamp: i64,
+    pub private_signature: String,
+    pub date: Option<chrono::NaiveDate>,
+}
 
+impl PullNewsRequest{
+    pub fn to_login(&self) -> Login{
+        Login{
+            ilander_id: self.ilander_id.clone(),
+            token_balance: self.token_balance.clone(),
+            timestamp: self.timestamp.clone(),
+            private_signature: self.private_signature.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "server")]
+pub async fn pull_news(data: dioxus_server::axum::Form<PullNewsRequest>) -> Result<(StatusCode, String), (StatusCode, String)>{
+    login(data.to_login()).await?;
+    if let Some(date) = data.date{
+        let news = server::get_news_from_date(date.into()).await?;
+        Ok((StatusCode::OK, News::list_to_md(news)))
+    } else {
+        let news = server::pull_ilander_news(data.ilander_id).await?;
+        Ok((StatusCode::OK, format!("# Here's {} news from your last pull!\n\ndisplaying 10 per pull, so feel free to check again until there's no news.\n\n****\n\n{}", news.len(), News::list_to_md(news))))
+    }
+}

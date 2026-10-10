@@ -514,6 +514,20 @@ impl News{
             publication_date: data.4,
         }
     }
+    pub fn list_to_md(news: Vec<News>) -> String{
+        if news.is_empty(){
+            "# No news today!".into()
+        } else {
+            let mut str: String = "".into();
+            for (index, new) in news.into_iter().enumerate(){
+                if index > 0{
+                    str = format!("{}\n****\n****\n\n", str);
+                }
+                str = format!("{}# {}\n\n{}\n\n****\n\n> Author: {}\n\n> Publication: {}", str, new.title, new.body, new.author, new.publication_date);
+            }
+            str
+        }
+    }
 }
 
 #[server]
@@ -528,5 +542,48 @@ pub async fn get_news(id: i32) -> Result<Option<News>, ServerFnError>{
         .map_err(|e| ServerFnError::new(e.to_string()))?
         .map(|l|{News::from(l)});
 
+    Ok(news)
+}
+
+#[cfg(feature = "server")]
+pub async fn get_news_from_date(date: chrono::NaiveDate) -> Result<Vec<News>, (StatusCode, String)>{
+    let pool = DB_POOL
+        .get()
+        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, "Database pool not initialized".into()))?;
+    let news: Vec<News> = sqlx::query_as::<_, (i32, String, String, String, OffsetDateTime)>("SELECT id, title, body, (SELECT username FROM users WHERE users.id=news.author) AS author, to_timestamp(publication_date) FROM news WHERE to_timestamp(publication_date)::date=$1")
+        .bind(date)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .into_iter()
+        .map(|l|{News::from(l)})
+        .collect();
+
+    Ok(news)
+}
+
+#[cfg(feature = "server")]
+pub async fn pull_ilander_news(id: i32) -> Result<Vec<News>, (StatusCode, String)>{
+    let pool = DB_POOL
+        .get()
+        .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, "Database pool not initialized".into()))?;
+    let news: Vec<News> = sqlx::query_as::<_, (i32, String, String, String, OffsetDateTime)>("SELECT id, title, body, (SELECT username FROM users WHERE users.id=news.author) AS author, to_timestamp(publication_date) FROM news WHERE publication_date > (SELECT last_news_pull FROM ilander WHERE ilander.id=$1) ORDER BY publication_date LIMIT 10")
+        .bind(id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .into_iter()
+        .map(|l|{News::from(l)})
+        .collect();
+
+    if !news.is_empty(){
+        let pub_date = news.last().unwrap().publication_date;
+        sqlx::query("UPDATE ilander SET last_news_pull=$1 WHERE id=$2")
+            .bind(pub_date.unix_timestamp())
+            .bind(id)
+            .execute(pool)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
     Ok(news)
 }

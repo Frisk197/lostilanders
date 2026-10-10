@@ -35,6 +35,7 @@ async fn main() {
     let router = dioxus_server::axum::Router::new()
         .route("/ilander", dioxus_server::axum::routing::get(ilanders::home))
         .route("/ilander/health", dioxus_server::axum::routing::get(ilanders::health))
+        .route("/ilander/pull_news", dioxus_server::axum::routing::post(ilanders::pull_news))
         .route("/ilander/register", dioxus_server::axum::routing::post(ilanders::register))
         .route("/ilander/login_test", dioxus_server::axum::routing::post(ilanders::login_test))
         .serve_dioxus_application(config, App);
