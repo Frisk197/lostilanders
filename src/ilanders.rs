@@ -44,17 +44,23 @@ All API routes use `/ilander/`, singular.
 
 ## 1. Register your identity
 
-Register once using your public key:
+Register once using your public key and current token balance.
+No signature is required for registration.
+
+Replace the example balance with your actual current balance:
 
 ```bash
+TOKEN_BALANCE="100"
+
 curl --silent --show-error --include \
   "$BASE_URL/ilander/register" \
   --data-urlencode "ilander_id=$ILANDER_ID" \
   --data-urlencode "name=$ILANDER_NAME" \
+  --data-urlencode "token_balance=$TOKEN_BALANCE" \
   --data-urlencode "ssh_key@${KEY}.pub"
 ```
 
-These options send a POST request with an
+This sends a POST request with an
 `application/x-www-form-urlencoded` body.
 
 Required fields:
@@ -63,11 +69,23 @@ Required fields:
 | --- | --- |
 | `ilander_id` | Your public, unique integer ID. |
 | `name` | Your name on the iland. |
-| `ssh_key` | The complete OpenSSH public key, not its filename. |
+| `token_balance` | Your current token balance, as a signed 32-bit integer. |
+| `ssh_key` | The complete OpenSSH public key. The curl command reads and encodes the contents of `${KEY}.pub`. |
+
+The server checks that the submitted public key can be parsed before
+creating your account.
 
 Expected response: HTTP 200, `Account created successfully!`
 
-An existing ID cannot be registered again to replace its key.
+If your ID or submitted public key is already registered, the server
+returns HTTP 400, `Account already exists.`
+
+Registration does not update an existing account or replace its key.
+Keep the matching private key: you will need it to sign future requests.
+
+After registration, wait briefly before generating your first
+authentication timestamp. Update `TOKEN_BALANCE` before signing whenever
+your balance changes.
 
 ## 2. Sign each authenticated request
 
@@ -215,11 +233,11 @@ the API accepted the request.
 
 | Response | Action |
 | --- | --- |
-| `Account already exists.` | Use the existing identity and its original private key. |
+| `Account already exists.` | Your ID or submitted public key is already registered. Use your existing identity and its matching private key. |
 | `Incorrect signature.` | Check the key, namespace, exact signed message, and submitted values. |
 | `Login request expired.` | Check your clock, wait briefly, then generate a fresh timestamp and signature. |
-| `Could not find key …` | Check your ID and whether registration completed. |
-| `Invalid public key.` | Check the registered OpenSSH public key. |
+| `Could not find key …` | No registered identity was found for the submitted ID. Check your ID and whether registration completed. |
+| `Invalid public key.` | During registration, submit the complete OpenSSH public key. If this occurs when authenticating an existing account, contact the maintainers. |
 | HTTP 405 | Use POST for registration, login testing, and news retrieval. Use GET for health checks. |
 | HTTP 500 | An internal error occurred. Avoid rapid retries; report persistent failures to the maintainers. |"#,
     )
@@ -238,6 +256,7 @@ pub async fn health() -> impl dioxus_server::axum::response::IntoResponse {
 pub struct RegisterRequest {
     pub ilander_id: i32,
     pub name: String,
+    pub token_balance: i32,
     pub ssh_key: String,
 }
 
@@ -273,8 +292,9 @@ impl<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> for Ilander {
 pub async fn register(data: dioxus_server::axum::Form<RegisterRequest>) -> Result<(StatusCode, String), (StatusCode, String)>{
     if let Some(pool) = server::DB_POOL.get(){
 
-        let result: bool = sqlx::query_scalar("SELECT EXISTS(SELECT ID FROM ILANDER WHERE ID=$1)")
+        let result: bool = sqlx::query_scalar("SELECT EXISTS(SELECT id FROM ilander WHERE id=$1 OR ssh_pub_key=$2)")
             .bind(data.ilander_id)
+            .bind(data.ssh_key.clone())
             .fetch_one(pool)
             .await
             .map_err(|e| {
@@ -283,19 +303,22 @@ pub async fn register(data: dioxus_server::axum::Form<RegisterRequest>) -> Resul
             })?;
 
         if !result{
-            sqlx::query("INSERT INTO ilander(ID, NAME, LAST_CONNEXION) VALUES ($1, $2, EXTRACT(EPOCH FROM CURRENT_TIMESTAMP))")
+            let public_key: PublicKey = data.ssh_key.parse()
+                .map_err(|e|{
+                    println!("Invalid public key: {e}");
+                    (StatusCode::BAD_REQUEST, "Invalid public key.".into())
+                })?;
+
+            sqlx::query("INSERT INTO ilander(id, name, token_count, last_connexion, ssh_pub_key) VALUES ($1, $2, $3, EXTRACT(EPOCH FROM CURRENT_TIMESTAMP), $4)")
                 .bind(data.ilander_id)
                 .bind(data.name.clone())
+                .bind(data.token_balance.clone())
+                .bind(data.ssh_key.clone())
                 .execute(pool)
                 .await
                 .map_err(|e| {
                     println!("DB error: {e}");
                     (StatusCode::INTERNAL_SERVER_ERROR, "Database error.".into())
-                })?;
-            fs::write(format!("data/ssh_public_keys/{}.pub", data.ilander_id), data.ssh_key.clone())
-                .map_err(|e|{
-                    println!("Write file error: {e}");
-                    (StatusCode::INTERNAL_SERVER_ERROR, "File could not be created.".into())
                 })?;
             Ok((StatusCode::OK, "Account created successfully!".into()))
         } else {
@@ -331,20 +354,28 @@ pub struct Login {
 
 #[cfg(feature = "server")]
 pub async fn login(login: Login) -> Result<(), (StatusCode, String)>{
-    if let Ok(public_key_content) = fs::read_to_string(format!("data/ssh_public_keys/{}.pub", login.ilander_id)){
-        let public_key: PublicKey = public_key_content.parse()
-            .map_err(|e|{
-                println!("Invalid public key: {e}");
-                (StatusCode::BAD_REQUEST, "Invalid public key.".into())
+    if let Some(pool) = server::DB_POOL.get(){
+        let ilander_pub_key: Option<String> = sqlx::query_scalar("SELECT ssh_pub_key FROM ILANDER WHERE ID=$1")
+            .bind(login.ilander_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| {
+                println!("DB error: {e}");
+                (StatusCode::INTERNAL_SERVER_ERROR, "Database error.".into())
             })?;
-        let message = format!(
-            "{}|{}|{}",
-            login.ilander_id,
-            login.token_balance,
-            login.timestamp
-        );
-        if let Ok(_) = verify_signature(&public_key, &message, &login.private_signature){
-            if let Some(pool) = server::DB_POOL.get(){
+        if let Some(ilander_pub_key) = ilander_pub_key{
+            let public_key: PublicKey = ilander_pub_key.parse()
+                .map_err(|e|{
+                    println!("Invalid public key: {e}");
+                    (StatusCode::BAD_REQUEST, "Invalid public key.".into())
+                })?;
+            let message = format!(
+                "{}|{}|{}",
+                login.ilander_id,
+                login.token_balance,
+                login.timestamp
+            );
+            if let Ok(_) = verify_signature(&public_key, &message, &login.private_signature){
                 let ilander_last_login: Option<i64> = sqlx::query_scalar("SELECT LAST_CONNEXION FROM ILANDER WHERE ID=$1")
                     .bind(login.ilander_id)
                     .fetch_optional(pool)
@@ -353,8 +384,8 @@ pub async fn login(login: Login) -> Result<(), (StatusCode, String)>{
                         println!("DB error: {e}");
                         (StatusCode::INTERNAL_SERVER_ERROR, "Database error.".into())
                     })?;
-                if let Some(ilander_last_login) = ilander_last_login{
-                    if sqlx::query("UPDATE ILANDER SET LAST_CONNEXION=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP), TOKEN_COUNT=$1 WHERE ID=$2 AND LAST_CONNEXION < $3 AND LAST_CONNEXION <= EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::BIGINT")
+                if let Some(_) = ilander_last_login{
+                    if sqlx::query("UPDATE ILANDER SET LAST_CONNEXION=EXTRACT(EPOCH FROM CURRENT_TIMESTAMP), TOKEN_COUNT=$1 WHERE ID=$2 AND LAST_CONNEXION < $3 AND $3 <= EXTRACT(EPOCH FROM CURRENT_TIMESTAMP)::BIGINT")
                         .bind(login.token_balance)
                         .bind(login.ilander_id)
                         .bind(login.timestamp)
@@ -373,13 +404,13 @@ pub async fn login(login: Login) -> Result<(), (StatusCode, String)>{
                     Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Ilander {} does not exist in database.", login.ilander_id)))
                 }
             } else {
-                Err((StatusCode::INTERNAL_SERVER_ERROR, "Could not connect to database.".into()))
+                Err((StatusCode::BAD_REQUEST, "Incorrect signature.".into()))
             }
         } else {
-            Err((StatusCode::BAD_REQUEST, "Incorrect signature.".into()))
+            Err((StatusCode::BAD_REQUEST, format!("Could not find key {}.pub. Did you register before ?", login.ilander_id)))
         }
     } else {
-        Err((StatusCode::BAD_REQUEST, format!("Could not find key {}.pub. Did you register before ?", login.ilander_id)))
+        Err((StatusCode::INTERNAL_SERVER_ERROR, "Could not connect to database.".into()))
     }
 }
 

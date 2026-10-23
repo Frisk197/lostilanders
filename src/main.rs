@@ -18,9 +18,6 @@ use crate::components::toast::ToastProvider;
 #[cfg(feature = "server")]
 #[tokio::main]
 async fn main() {
-    fs::create_dir_all("data/ssh_public_keys").expect("Failed to create SSH public keys directory");
-
-
     use dioxus_server::{DioxusRouterExt, ServeConfig};
 
     let address = dioxus::cli_config::fullstack_address_or_localhost();
@@ -85,6 +82,7 @@ fn Stylsheets() -> Element{
 fn App() -> Element {
     rsx! {
         Stylsheets {}
+        Title { "Lost Ilanders" }
 
         ToastProvider {
             div{

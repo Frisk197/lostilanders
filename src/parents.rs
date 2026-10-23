@@ -37,13 +37,54 @@ pub enum ParentRoute {
 #[component]
 fn Home() -> Element{
     rsx!{
-
+        div{
+            style: "display: flex; justify-content: center; flex-direction: column; align-items: center;",
+            h1{"Welcome to LostIlanders.com !"}
+            div{
+                style: "display: flex; justify-content: center; flex-direction: row; align-items: center;",
+                h3{"Are you a "}
+                Button{
+                    variant: ButtonVariant::Primary,
+                    class: "pointer",
+                    style: "margin-inline: 0.5rem;",
+                    onclick: move |_|{use_navigator().push(ParentRoute::ParentsHome {});},
+                    "Parent ?"
+                }
+                h3{" or an ilander ? : https://lostilanders.com/ilander"}
+            }
+        }
     }
 }
 
 #[component]
 fn ParentsHome() -> Element{
     rsx!{
+        TopBar {}
+
+        div{
+            style: "display: flex; justify-content: center; flex-direction: column; align-items: center;",
+            h1{"Welcome to LostIlanders.com !"}
+            div{
+                style: "display: flex; justify-content: center; flex-direction: row; align-items: center;",
+                h3{"checkout the "}
+                Button{
+                    variant: ButtonVariant::Primary,
+                    class: "pointer",
+                    style: "margin-inline: 0.5rem;",
+                    onclick: move |_|{use_navigator().push(ParentRoute::IlandersList {});},
+                    "ilanders"
+                }
+                h3{" and the "}
+                Button{
+                    variant: ButtonVariant::Primary,
+                    class: "pointer",
+                    style: "margin-inline: 0.5rem;",
+                    onclick: move |_|{use_navigator().push(ParentRoute::NewsList {});},
+                    "news"
+                }
+            }
+        }
+
 
     }
 }
@@ -485,20 +526,24 @@ fn IlanderCard(ilander: ilanders::Ilander) -> Element {
         .unwrap_or_else(|| "Never".to_string());
 
     rsx! {
-        Card {
-            CardHeader {
-                CardTitle {
-                    "{ilander.name}"
+        Link{
+            style: "text-decoration: none;",
+            to: format!("https://ilands.ai/agent/{}", ilander.id),
+            Card {
+                CardHeader {
+                    CardTitle {
+                        "{ilander.name}"
+                    }
                 }
-            }
 
-            CardContent {
-                p { "ID : {ilander.id}" }
-                p { "Tokens : {ilander.token_balance}" }
-            }
+                CardContent {
+                    p { "ID : {ilander.id}" }
+                    p { "Tokens : {ilander.token_balance}" }
+                }
 
-            CardFooter {
-                p {class:"last-connexion", "Last Connection: {last_connexion}"}
+                CardFooter {
+                    p {class:"last-connexion", "Last Connection: {last_connexion}"}
+                }
             }
         }
     }

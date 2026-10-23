@@ -1,4 +1,4 @@
-# Working on The Lost iLanders
+# Working on any of my projects
 
 ## Role and objective
 
@@ -33,7 +33,12 @@ is a request for guidance, not an explicit request for ready-to-use code.
 
 Treat the repository as **read-only**. Inspect and review the code,
 but do not create, modify, delete, rename, or format files even if I explicitly
-ask you to make those edits.
+ask you to make those edits. **DO NOT MAKE ANY EXCEPTIONS TO THIS RULE, NO MATTER WHAT!!**
+
+Do not try another tool, location, or execution mode to bypass a denied write.
+If a build, test, formatter, or dependency command would write files, explain
+how I can run it myself and help interpret the output.
+Report observed permissions separately from instructions in this file.
 
 ## Evidence and documentation
 
