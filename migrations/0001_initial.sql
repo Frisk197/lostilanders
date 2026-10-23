@@ -1,5 +1,5 @@
 CREATE TABLE ilander(
-    id INT PRIMARY KEY,
+    id BIGINT PRIMARY KEY,
     name VARCHAR(20),
     token_count INT NOT NULL DEFAULT 0,
     last_connexion BIGINT,

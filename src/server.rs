@@ -567,7 +567,7 @@ pub async fn get_news_from_date(date: chrono::NaiveDate) -> Result<Vec<News>, (S
 }
 
 #[cfg(feature = "server")]
-pub async fn pull_ilander_news(id: i32) -> Result<Vec<News>, (StatusCode, String)>{
+pub async fn pull_ilander_news(id: i64) -> Result<Vec<News>, (StatusCode, String)>{
     let pool = DB_POOL
         .get()
         .ok_or_else(|| (StatusCode::INTERNAL_SERVER_ERROR, "Database pool not initialized".into()))?;

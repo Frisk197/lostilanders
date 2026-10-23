@@ -22,7 +22,7 @@ jobs:
       - name: Install Rust
         run: |
           apt-get update
-          apt-get install -y ca-certificates build-essential rustup pkg-config libssl-dev
+          apt-get install -y ca-certificates build-essential rustup pkg-config libssl-dev openssh-client
           rustup default 1.97.1
           rustup target add wasm32-unknown-unknown
           rustc --version
@@ -46,3 +46,115 @@ jobs:
           path: lostilanders-linux.tar.gz
           archive: false
           if-no-files-found: error
+
+      - name: Prepare SSH
+        env:
+          OVH_SSH_KEY: ${{ secrets.OVH_SSH_KEY }}
+          OVH_KNOWN_HOSTS: ${{ secrets.OVH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          printf '%s\n' "$OVH_SSH_KEY" > "$HOME/.ssh/id_ed25519"
+          printf '%s\n' "$OVH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/id_ed25519"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Test SSH connection
+        env:
+          OVH_HOST: ${{ secrets.OVH_HOST }}
+          OVH_USER: ${{ secrets.OVH_USER }}
+        run: |
+          ssh \
+            -i "$HOME/.ssh/id_ed25519" \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$OVH_USER@$OVH_HOST" \
+            whoami
+
+      - name: Transfer Linux release
+        env:
+          OVH_HOST: ${{ secrets.OVH_HOST }}
+          OVH_USER: ${{ secrets.OVH_USER }}
+        run: |
+          scp \
+            -i "$HOME/.ssh/id_ed25519" \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            lostilanders-linux.tar.gz \
+            "$OVH_USER@$OVH_HOST:lostilanders-linux.tar.gz"
+
+      - name: Extract new binary
+        env:
+          OVH_HOST: ${{ secrets.OVH_HOST }}
+          OVH_USER: ${{ secrets.OVH_USER }}
+        run: |
+          ssh \
+            -i "$HOME/.ssh/id_ed25519" \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$OVH_USER@$OVH_HOST" \
+            '
+          set -e
+          mkdir ~/lostilanders-linux-new
+          tar -xzf ~/lostilanders-linux.tar.gz -C ~/lostilanders-linux-new
+          cp ~/lostilanders-linux/.env ~/lostilanders-linux-new/.env
+          '
+
+      - name: Stop lostilanders service
+        env:
+          OVH_HOST: ${{ secrets.OVH_HOST }}
+          OVH_USER: ${{ secrets.OVH_USER }}
+        run: |
+          ssh \
+            -i "$HOME/.ssh/id_ed25519" \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$OVH_USER@$OVH_HOST" \
+            sudo -n systemctl stop lostilanders
+
+      - name: Replace old binary
+        env:
+          OVH_HOST: ${{ secrets.OVH_HOST }}
+          OVH_USER: ${{ secrets.OVH_USER }}
+        run: |
+          ssh \
+            -i "$HOME/.ssh/id_ed25519" \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$OVH_USER@$OVH_HOST" \
+            '
+          set -e
+          rm -rf ~/lostilanders-linux-save
+          mv ~/lostilanders-linux ~/lostilanders-linux-save
+          mv ~/lostilanders-linux-new ~/lostilanders-linux
+          '
+
+      - name: Start lostilanders service
+        env:
+          OVH_HOST: ${{ secrets.OVH_HOST }}
+          OVH_USER: ${{ secrets.OVH_USER }}
+        run: |
+          ssh \
+            -i "$HOME/.ssh/id_ed25519" \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$OVH_USER@$OVH_HOST" \
+            sudo -n systemctl start lostilanders

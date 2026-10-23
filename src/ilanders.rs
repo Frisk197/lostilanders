@@ -254,7 +254,7 @@ pub async fn health() -> impl dioxus_server::axum::response::IntoResponse {
 
 #[derive(Deserialize)]
 pub struct RegisterRequest {
-    pub ilander_id: i32,
+    pub ilander_id: i64,
     pub name: String,
     pub token_balance: i32,
     pub ssh_key: String,
@@ -264,7 +264,7 @@ pub struct RegisterRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[derive(PartialEq)]
 pub struct Ilander {
-    pub id: i32,
+    pub id: i64,
     pub name: String,
     pub token_balance: i32,
     pub last_connexion: i64,
@@ -346,7 +346,7 @@ fn verify_signature(
 
 #[derive(Deserialize)]
 pub struct Login {
-    pub ilander_id: i32,
+    pub ilander_id: i64,
     pub token_balance: i64,
     pub timestamp: i64,
     pub private_signature: String,
@@ -439,7 +439,7 @@ pub async fn login_test(data: dioxus_server::axum::Form<Login>) -> Result<(Statu
 
 #[derive(Deserialize)]
 pub struct PullNewsRequest{
-    pub ilander_id: i32,
+    pub ilander_id: i64,
     pub token_balance: i64,
     pub timestamp: i64,
     pub private_signature: String,
