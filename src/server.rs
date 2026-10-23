@@ -52,6 +52,10 @@ pub async fn create_db_pool() -> Result<(), ServerFnError> {
         .await
         .map_err(|e| ServerFnError::new(e.to_string()))?;
 
+    sqlx::migrate!("./migrations").run(&pool)
+        .await
+        .map_err(|e| ServerFnError::new(e.to_string()))?;
+
     DB_POOL
         .set(pool)
         .map_err(|_| ServerFnError::new("Database pool already initialized"))?;
