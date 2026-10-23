@@ -1,0 +1,48 @@
+name: Build Linux release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    container: debian:13
+
+    steps:
+      - name: Check build environment
+        run: cat /etc/os-release
+
+#      - name: Install Git
+#        run: |
+#          apt-get update
+#          apt-get install -y git ca-certificates
+
+      - name: Install Rust
+        run: |
+          apt-get update
+          apt-get install -y ca-certificates build-essential rustup pkg-config libssl-dev
+          rustup default 1.97.1
+          rustup target add wasm32-unknown-unknown
+          rustc --version
+          cargo --version
+
+      - name: Install Dioxus CLI
+        run: cargo install dioxus-cli --version 0.7.10 --locked --root /usr/local
+
+      - name: Checkout source
+        uses: actions/checkout@v7
+
+      - name: Build Linux release
+        run: dx bundle --web --fullstack --release --locked
+
+      - name: Package Linux release
+        run: tar -czf lostilanders-linux.tar.gz -C target/dx/lostilanders/release/web server public
+
+      - name: Upload Linux release
+        uses: actions/upload-artifact@v7
+        with:
+          path: lostilanders-linux.tar.gz
+          archive: false
+          if-no-files-found: error
